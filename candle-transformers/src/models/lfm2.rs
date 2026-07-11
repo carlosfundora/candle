@@ -653,6 +653,26 @@ impl Model {
         logits.to_dtype(DType::F32)
     }
 
+    /// Run the decoder and return the post-layer residual stream for every layer.
+    ///
+    /// Each tensor has shape `[batch, sequence, hidden_size]`. The same cache semantics and
+    /// `index_pos` convention as [`Self::forward`] apply. This method intentionally omits the final
+    /// embedding normalization and language-model head so callers can inspect layer-local states.
+    pub fn forward_hidden_states(
+        &self,
+        input_ids: &Tensor,
+        index_pos: usize,
+        cache: &mut Cache,
+    ) -> Result<Vec<Tensor>> {
+        let mut hidden_states = self.embed_tokens.forward(input_ids)?;
+        let mut layer_states = Vec::with_capacity(self.layers.len());
+        for (block_idx, layer) in self.layers.iter().enumerate() {
+            hidden_states = layer.forward(&hidden_states, index_pos, block_idx, cache)?;
+            layer_states.push(hidden_states.clone());
+        }
+        Ok(layer_states)
+    }
+
     pub fn dtype(&self) -> DType {
         self.dtype
     }
